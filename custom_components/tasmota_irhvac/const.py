@@ -91,6 +91,15 @@ CONF_KEEP_MODE = "keep_mode_when_off"
 CONF_SWINGV = "default_swingv"
 CONF_SWINGH = "default_swingh"
 
+# Griffin specific config entry names
+PRESET_POWERFUL = "Powerful"
+PRESET_MIN_HEAT = "Min Heat"
+PRESET_ECONO = "Economy"
+PRESET_SET_V = "Set Vertical"
+PRESET_SET_H = "Set Horizontal"
+
+CONF_PRESET_MODES_LIST = "supported_preset_modes"
+
 # Platform specific default values
 DEFAULT_NAME = "IR AirConditioner"
 DEFAULT_STATE_TOPIC = "state"

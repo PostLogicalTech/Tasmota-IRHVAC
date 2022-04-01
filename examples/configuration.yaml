@@ -18,6 +18,7 @@ climate:
     initial_operation_mode: "off" # optional - default "off" string value (one of the "supported_modes")
     away_temp: 24 #optional - default 24 int value
     precision: 1 #optional - default 1 int or float value. Can be set to 1, 0.5 or 0.1
+    temp_step: 2 #optional - Use 2 for Fujitsu Heat Pumps in Fahrenheit mode
     supported_modes:
       - "heat"
       - "cool"
@@ -50,6 +51,13 @@ climate:
       - "vertical" #up to down
       # - "horizontal" # Left to right
       # - "both"
+    supported_preset_modes:
+      - "none"
+      - "Powerful"
+      - "Economy"
+      - "Min Heat"
+      - "Set Vertical"
+      - "Set Horizontal"
     default_quiet_mode: "Off" #optional - default "Off" string value
     default_turbo_mode: "Off" #optional - default "Off" string value
     default_econo_mode: "Off" #optional - default "Off" string value

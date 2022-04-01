@@ -1,3 +1,6 @@
+CUSTOMIZED FUJITSU VERSION: This repository is not the normal Tasmota-IRHVAC code. This was hacked together to allow more full control of Fujitsu units that use AR-REG1U and AR-RAH2U remotes in addition to adding preset_modes. The Powerful preset_mode only runs for a period of time, but rather than code a wait, I just added an automation to switch from Powerful to None after 20 minutes. This also implements a conversion from Celsius to Fahrenheit to correspond with Fujitsu remotes which are accurate at numbers like 20C/68F but deviate more and more as each degree C change is aligned with a 2 degree F change (not 9/5).
+Unless you have one of these particular remotes, you probably don't want to consider this fork.
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
 # Tasmota-IRHVAC
 Home Assistant platform for controlling IR Air Conditioners via Tasmota IRHVAC command and compatible harware

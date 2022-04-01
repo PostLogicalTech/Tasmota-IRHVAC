@@ -1,9 +1,9 @@
 {
   "domain": "tasmota_irhvac",
-  "name": "Tasmota Irhvac",
-  "version": "2021.12.0",
-  "documentation": "https://github.com/hristo-atanasov/Tasmota-IRHVAC",
-  "issue_tracker": "https://github.com/hristo-atanasov/Tasmota-IRHVAC/issues",
+  "name": "Tasmota IRhvac",
+  "version": "2022.4.1",
+  "documentation": "https://github.com/PostLogical/Tasmota-IRHVAC",
+  "issue_tracker": "https://github.com/PostLogical/Tasmota-IRHVAC/issues",
   "requirements": [],
   "dependencies": [
     "mqtt",
@@ -11,6 +11,7 @@
   ],
   "codeowners": [
     "@hristo-atanasov",
-    "@nao-pon"
+    "@nao-pon",
+    "@PostLogical"
   ]
 }
