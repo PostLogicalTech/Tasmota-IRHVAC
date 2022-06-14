@@ -283,7 +283,10 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 )
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(MQTT_AVAILABILITY_SCHEMA.schema)
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(mqtt.MQTT_BASE_PLATFORM_SCHEMA.schema)
+if hasattr(mqtt, 'MQTT_BASE_PLATFORM_SCHEMA'):
+    PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(mqtt.MQTT_BASE_PLATFORM_SCHEMA.schema)
+else:
+    PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(mqtt.config.MQTT_BASE_SCHEMA.schema)
 
 IRHVAC_SERVICE_SCHEMA = vol.Schema(
     {vol.Required(ATTR_ENTITY_ID): cv.entity_ids})
@@ -431,8 +434,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         self._humidity_sensor = config.get(CONF_HUMIDITY_SENSOR)
         self._power_sensor = config.get(CONF_POWER_SENSOR)
         self.state_topic = config[CONF_STATE_TOPIC]
-        self._hvac_mode = STATE_UNKNOWN
-        self._init_hvac_mode = config[CONF_INITIAL_OPERATION_MODE]
+        self._hvac_mode = config[CONF_INITIAL_OPERATION_MODE]
         self._away_temp = config.get(CONF_AWAY_TEMP)
         self._saved_target_temp = config[CONF_TARGET_TEMP] or self._away_temp
         self._temp_precision = config[CONF_PRECISION]
@@ -541,9 +543,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
             _LOGGER.warning(
                 "No previously saved temperature, setting to %s", self._target_temp
             )
-        # Set initial state
-        if self._hvac_mode is STATE_UNKNOWN:
-            self._hvac_mode = self._init_hvac_mode
 
         if self._hvac_mode is HVAC_MODE_OFF:
             self.power_mode = STATE_OFF
@@ -815,7 +814,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
     @property
     def hvac_mode(self):
         """Return current operation."""
-        return self._hvac_mode
+        return STATE_OFF if self._hvac_mode in [STATE_UNKNOWN, STATE_UNAVAILABLE] else self._hvac_mode
 
     @property
     def hvac_action(self):
