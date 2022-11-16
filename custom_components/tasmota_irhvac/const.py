@@ -90,6 +90,7 @@ CONF_SLEEP = "default_sleep_mode"
 CONF_KEEP_MODE = "keep_mode_when_off"
 CONF_SWINGV = "default_swingv"
 CONF_SWINGH = "default_swingh"
+CONF_TOGGLE_LIST = "toggle_list"
 
 # Griffin specific config entry names
 PRESET_POWERFUL = "Powerful"
@@ -139,6 +140,8 @@ ATTR_SLEEP = 'sleep'
 ATTR_LAST_ON_MODE = 'last_on_mode'
 ATTR_SWINGV = 'swingv'
 ATTR_SWINGH = 'swingh'
+ATTR_FIX_SWINGV = 'fix_swingv'
+ATTR_FIX_SWINGH = 'fix_swingh'
 
 SERVICE_ECONO_MODE = 'set_econo'
 SERVICE_TURBO_MODE = 'set_turbo'
@@ -148,6 +151,8 @@ SERVICE_FILTERS_MODE = 'set_filters'
 SERVICE_CLEAN_MODE = 'set_clean'
 SERVICE_BEEP_MODE = 'set_beep'
 SERVICE_SLEEP_MODE = 'set_sleep'
+SERVICE_SET_SWINGV = 'set_swingv'
+SERVICE_SET_SWINGH = 'set_swingh'
 
 # Map attributes to properties of the state object
 ATTRIBUTES_IRHVAC = {
@@ -155,13 +160,15 @@ ATTRIBUTES_IRHVAC = {
     ATTR_TURBO: 'turbo',
     ATTR_QUIET: 'quiet',
     ATTR_LIGHT: 'light',
-    ATTR_FILTERS: 'filters',
+    ATTR_FILTERS: 'filter',
     ATTR_CLEAN: 'clean',
     ATTR_BEEP: 'beep',
     ATTR_SLEEP: 'sleep',
     ATTR_LAST_ON_MODE: 'last_on_mode',
     ATTR_SWINGV: 'swingv',
     ATTR_SWINGH: 'swingh',
+    ATTR_FIX_SWINGV: 'fix_swingv',
+    ATTR_FIX_SWINGH: 'fix_swingh',
 }
 
 ON_OFF_LIST = [
@@ -171,4 +178,17 @@ ON_OFF_LIST = [
     'Off',
     'on',
     'off'
+]
+
+TOGGLE_ALL_LIST = [
+    'SwingV',
+    'SwingH',
+    'Quiet',
+    'Turbo',
+    'Econo',
+    'Light',
+    'Filter',
+    'Clean',
+    'Beep',
+    'Sleep',
 ]

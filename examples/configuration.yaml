@@ -7,7 +7,9 @@ climate:
     # useful when a normal remote is in use alongside the tasmota device, may be less reliable than the second option.
     state_topic: "tele/your_tasmota_device/RESULT"
     # State is updated when the tasmota device completes IR transmissionm, should be pretty reliable.
-    state_topic: "stat/your_tasmota_device/RESULT"
+    #state_topic: "stat/your_tasmota_device/RESULT"
+    # Uncomment if your 'available topic' of Tasmota IR device are different (if device in HA is disabled)
+    #availability_topic: "tele/your_tasmota_device/LWT"
     temperature_sensor: sensor.kitchen_temperature
     humidity_sensor: sensor.kitchen_humidity #optional - default None
     power_sensor: binaly_sensor.kitchen_ac_power #optional - default None
@@ -71,3 +73,16 @@ climate:
     default_swingv: "high" #optional - default "" string value
     default_swingh: "left" #optional - default "" string value 
     keep_mode_when_off: True #optional - default False boolean value : Must be True for MITSUBISHI_AC, ECOCLIM, etc.
+    toggle_list: #optional - default []
+      # The toggled property is a setting that does not retain the On state.
+      # Set this if your AC properties are toggle function.
+      #- Beep
+      #- Clean
+      #- Econo
+      #- Filter
+      #- Light
+      #- Quiet
+      #- Sleep
+      #- SwingH
+      #- SwingV
+      #- Turbo

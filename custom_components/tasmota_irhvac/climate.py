@@ -83,9 +83,9 @@ from .const import (
     ATTR_CLEAN,
     ATTR_BEEP,
     ATTR_SLEEP,
-    ATTR_LAST_ON_MODE,
     ATTR_SWINGV,
     ATTR_SWINGH,
+    ATTR_LAST_ON_MODE,
     ATTRIBUTES_IRHVAC,
     STATE_AUTO,
     STATE_COOL,
@@ -140,6 +140,7 @@ from .const import (
     CONF_SWINGV,
     CONF_SWINGH,
     CONF_PRESET_MODES_LIST,
+    CONF_TOGGLE_LIST,
     DATA_KEY,
     DOMAIN,
     DEFAULT_NAME,
@@ -175,6 +176,9 @@ from .const import (
     SERVICE_CLEAN_MODE,
     SERVICE_BEEP_MODE,
     SERVICE_SLEEP_MODE,
+    SERVICE_SET_SWINGV,
+    SERVICE_SET_SWINGH,
+    TOGGLE_ALL_LIST,
 )
 
 DEFAULT_MODES_LIST = [
@@ -190,7 +194,7 @@ AVAILABLE_PRESET_MODES_LIST = [PRESET_NONE, PRESET_AWAY, PRESET_POWERFUL, PRESET
                                 PRESET_ECONO, PRESET_SET_V, PRESET_SET_H]
 
 DEFAULT_SWING_LIST = [SWING_OFF, SWING_VERTICAL]
-DEFAULT_INITIAL_OPERATION_MODE = STATE_OFF
+DEFAULT_INITIAL_OPERATION_MODE = HVAC_MODE_OFF
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -222,8 +226,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(
             CONF_INITIAL_OPERATION_MODE, default=DEFAULT_INITIAL_OPERATION_MODE
         ): vol.In(
-            [STATE_HEAT, STATE_COOL, STATE_AUTO,
-                STATE_DRY, STATE_FAN_ONLY, STATE_OFF]
+            HVAC_MODES
         ),
         vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
         vol.Optional(CONF_PRECISION, default=DEFAULT_PRECISION): vol.In(
@@ -279,6 +282,10 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_PRESET_MODES_LIST, default=DEFAULT_PRESET_MODES_LIST): vol.All(
             cv.ensure_list, [vol.In(AVAILABLE_PRESET_MODES_LIST)],
         ),
+        vol.Optional(CONF_TOGGLE_LIST, default=[]): vol.All(
+            cv.ensure_list,
+            [vol.In(TOGGLE_ALL_LIST)],
+        ),
     }
 )
 
@@ -315,6 +322,12 @@ SERVICE_SCHEMA_BEEP_MODE = IRHVAC_SERVICE_SCHEMA.extend(
 SERVICE_SCHEMA_SLEEP_MODE = IRHVAC_SERVICE_SCHEMA.extend(
     {vol.Required(ATTR_SLEEP): cv.string}
 )
+SERVICE_SCHEMA_SET_SWINGV = IRHVAC_SERVICE_SCHEMA.extend(
+    {vol.Required(ATTR_SWINGV): vol.In(['off', 'auto', 'highest', 'high', 'middle', 'low', 'lowest'])}
+)
+SERVICE_SCHEMA_SET_SWINGH = IRHVAC_SERVICE_SCHEMA.extend(
+    {vol.Required(ATTR_SWINGH): vol.In(['off', 'auto', 'left max', 'left', 'middle', 'right', 'right max', 'wide'])}
+)
 
 SERVICE_TO_METHOD = {
     SERVICE_ECONO_MODE: {
@@ -348,6 +361,14 @@ SERVICE_TO_METHOD = {
     SERVICE_SLEEP_MODE: {
         'method': 'async_set_sleep',
         'schema': SERVICE_SCHEMA_SLEEP_MODE
+    },
+    SERVICE_SET_SWINGV: {
+        'method': 'async_set_swingv',
+        'schema': SERVICE_SCHEMA_SET_SWINGV
+    },
+    SERVICE_SET_SWINGH: {
+        'method': 'async_set_swingh',
+        'schema': SERVICE_SCHEMA_SET_SWINGH
     },
 }
 
@@ -462,9 +483,9 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         self._target_temp = None
         self._support_flags = SUPPORT_FLAGS
         # if self._away_temp is not None:
-        #     self._support_flags = SUPPORT_FLAGS | SUPPORT_PRESET_MODE
+        #     self._support_flags = self._support_flags | SUPPORT_PRESET_MODE
         if self._swing_mode is not None:
-            self._support_flags = SUPPORT_FLAGS | SUPPORT_SWING_MODE
+            self._support_flags = self._support_flags | SUPPORT_SWING_MODE
         self._preset_mode = None
         self._preset_modes_list = config[CONF_PRESET_MODES_LIST]
         self._min_heat = False
@@ -478,15 +499,18 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         self._model = config[CONF_MODEL]
         self._celsius = config[CONF_CELSIUS]
         self._light = config[CONF_LIGHT].lower()
-        self._filters = config[CONF_FILTER].lower()
+        self._filter = config[CONF_FILTER].lower()
         self._clean = config[CONF_CLEAN].lower()
         self._beep = config[CONF_BEEP].lower()
         self._sleep = config[CONF_SLEEP].lower()
         self._sub_state = None
         self._keep_mode = config[CONF_KEEP_MODE]
         self._last_on_mode = None
-        self._swingv = config.get(CONF_SWINGV)
-        self._swingh = config.get(CONF_SWINGH)
+        self._swingv = config.get(CONF_SWINGV).lower() if config.get(CONF_SWINGV) is not None else None
+        self._swingh = config.get(CONF_SWINGH).lower() if config.get(CONF_SWINGH) is not None else None
+        self._fix_swingv = None
+        self._fix_swingh = None
+        self._toggle_list = config[CONF_TOGGLE_LIST]
 
         availability_topic = config.get(CONF_AVAILABILITY_TOPIC)
         if (availability_topic) is None:
@@ -527,15 +551,22 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                 self._fan_mode = old_state.attributes.get(ATTR_FAN_MODE)
             if old_state.attributes.get(ATTR_SWING_MODE) is not None:
                 self._swing_mode = old_state.attributes.get(ATTR_SWING_MODE)
-            for attr in ATTRIBUTES_IRHVAC:
+            if old_state.attributes.get(ATTR_LAST_ON_MODE) is not None:
+                self._last_on_mode = old_state.attributes.get(ATTR_LAST_ON_MODE)
+
+            for attr, prop in ATTRIBUTES_IRHVAC.items():
                 val = old_state.attributes.get(attr)
                 if val is not None:
-                    setattr(self, "_" + attr, val)
+                    setattr(self, "_" + prop, val)
             if old_state.state:
                 self._hvac_mode = old_state.state
-                self._enabled = self._hvac_mode != STATE_OFF
+                self._enabled = self._hvac_mode != HVAC_MODE_OFF
                 if self._enabled:
                     self._last_on_mode = self._hvac_mode
+            if self._swingv != "auto":
+                self._fix_swingv = self._swingv
+            if self._swingh != "auto":
+                self._fix_swingh = self._swingh
         else:
             # No previous state, try and restore defaults
             if self._target_temp is None:
@@ -550,6 +581,9 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         else:
             self.power_mode = STATE_ON
             self._enabled = True
+
+        for key in self._toggle_list:
+            setattr(self, '_' + key.lower(), 'off')
 
         if self._temp_sensor:
             async_track_state_change(self.hass, self._temp_sensor, self._async_sensor_changed)
@@ -651,7 +685,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                         if "Light" in payload:
                             self._light = payload["Light"].lower()
                         if "Filter" in payload:
-                            self._filters = payload["Filter"].lower()
+                            self._filter = payload["Filter"].lower()
                         if "Clean" in payload:
                             self._clean = payload["Clean"].lower()
                             if payload["Clean"].lower() == "on":
@@ -663,9 +697,13 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                             self._sleep = payload["Sleep"]
                         if  "SwingV" in payload:
                             self._swingv = payload["SwingV"].lower()
-                        if  "SwingH" in payload:
+                            if self._swingv != "auto":
+                        self._fix_swingv = self._swingv
+                if  "SwingH" in payload:
                             self._swingh = payload["SwingH"].lower()
-                        if (
+                            if self._swingh != "auto":
+                        self._fix_swingh = self._swingh
+                if (
                             "SwingV" in payload
                             and payload["SwingV"].lower() == STATE_AUTO
                             and "SwingH" in payload
@@ -711,18 +749,23 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                                 self._fan_mode = fan_mode
                             _LOGGER.debug(self._fan_mode)
 
-                    # Set default state to off
-                    if self.power_mode == STATE_OFF:
-                        if self._hvac_mode is not HVAC_MODE_OFF:
-                            self._last_on_mode = self._hvac_mode
-                        self._hvac_mode = HVAC_MODE_OFF
-                        self._enabled = False
-                    else:
-                        self._last_on_mode = self._hvac_mode
-                        self._enabled = True
+                if self._hvac_mode is not HVAC_MODE_OFF:
+                    self._last_on_mode = self._hvac_mode
 
-            # Update HA UI and State
-            await self.async_update_ha_state()
+                # Set default state to off
+                if self.power_mode == STATE_OFF:
+                    self._hvac_mode = HVAC_MODE_OFF
+                    self._enabled = False
+                else:
+                    self._enabled = True
+
+                # Set toggles to 'off'
+                for key in self._toggle_list:
+                    setattr(self, '_' + key.lower(), 'off')
+
+                # Update HA UI and State
+                await self.async_update_ha_state()
+                #self.async_schedule_update_ha_state()
 
             # Check power sensor state
             if self._power_sensor and prev_power is not None and prev_power != self.power_mode:
@@ -766,8 +809,8 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
     @property
     def extra_state_attributes(self):
         """Return the state attributes of the device."""
-        return {attribute: getattr(self, '_' + attribute)
-             for attribute in ATTRIBUTES_IRHVAC}
+        return {attr: getattr(self, '_' + prop)
+             for attr, prop in ATTRIBUTES_IRHVAC.items()}
 
     @property
     def should_poll(self):
@@ -814,7 +857,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
     @property
     def hvac_mode(self):
         """Return current operation."""
-        return STATE_OFF if self._hvac_mode in [STATE_UNKNOWN, STATE_UNAVAILABLE] else self._hvac_mode
+        return HVAC_MODE_OFF if self._hvac_mode in [STATE_UNKNOWN, STATE_UNAVAILABLE] else self._hvac_mode
 
     @property
     def hvac_action(self):
@@ -925,7 +968,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
 
     async def async_turn_off(self):
         """Turn thermostat off."""
-        self._hvac_mode = STATE_OFF
+        self._hvac_mode = HVAC_MODE_OFF
         self.power_mode = STATE_OFF
         await self.async_send_cmd()
 
@@ -948,7 +991,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
             await self.set_mode(hvac_mode)
 
         self._target_temp = temperature
-        if not self._hvac_mode.lower() == HVAC_MODE_OFF:
+        if not self._hvac_mode == HVAC_MODE_OFF:
             self.power_mode = STATE_ON
         await self.async_send_cmd()
 
@@ -970,7 +1013,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                 _LOGGER.error(self._fan_list)
                 return
         self._fan_mode = fan_mode
-        if not self._hvac_mode.lower() == HVAC_MODE_OFF:
+        if not self._hvac_mode == HVAC_MODE_OFF:
             self.power_mode = STATE_ON
         await self.async_send_cmd()
 
@@ -983,7 +1026,8 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
             _LOGGER.error(self._swing_list)
             return
         self._swing_mode = swing_mode
-        if not self._hvac_mode.lower() == HVAC_MODE_OFF:
+        # note: set _swingv and _swingh in send_ir() later
+        if not self._hvac_mode == HVAC_MODE_OFF:
             self.power_mode = STATE_ON
         await self.async_send_cmd()
 
@@ -1019,7 +1063,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         """Set new target filters mode."""
         if filters not in ON_OFF_LIST:
             return
-        self._filters = filters.lower()
+        self._filter = filters.lower()
         await self.async_send_cmd()
 
     async def async_set_clean(self, clean):
@@ -1039,6 +1083,44 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
     async def async_set_sleep(self, sleep):
         """Set new target sleep mode."""
         self._sleep = sleep.lower()
+        await self.async_send_cmd()
+
+    async def async_set_swingv(self, swingv):
+        """Set new target swingv."""
+        self._swingv = swingv.lower()
+        if self._swingv != "auto":
+            self._fix_swingv = self._swingv
+            if self._swing_mode == SWING_BOTH:
+                if SWING_HORIZONTAL in self._swing_list:
+                    self._swing_mode = SWING_HORIZONTAL
+            elif self._swing_mode == SWING_VERTICAL:
+                self._swing_mode = SWING_OFF
+        else:
+            if self._swing_mode == SWING_HORIZONTAL:
+                if SWING_BOTH in self._swing_list:
+                    self._swing_mode = SWING_BOTH
+            else:
+                if SWING_VERTICAL in self._swing_list:
+                    self._swing_mode = SWING_VERTICAL
+        await self.async_send_cmd()
+
+    async def async_set_swingh(self, swingh):
+        """Set new target swingh."""
+        self._swingh = swingh.lower()
+        if self._swingh != "auto":
+            self._fix_swingh = self._swingh
+            if self._swing_mode == SWING_BOTH:
+                if SWING_VERTICAL in self._swing_list:
+                    self._swing_mode = SWING_VERTICAL
+            elif self._swing_mode == SWING_HORIZONTAL:
+                self._swing_mode = SWING_OFF
+        else:
+            if self._swing_mode == SWING_VERTICAL:
+                if SWING_BOTH in self._swing_list:
+                    self._swing_mode = SWING_BOTH
+            else:
+                if SWING_HORIZONTAL in self._swing_list:
+                    self._swing_mode = SWING_HORIZONTAL
         await self.async_send_cmd()
 
     async def _async_power_sensor_changed(self, entity_id, old_state, new_state):
@@ -1206,6 +1288,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
 
     async def set_mode(self, hvac_mode):
         """Set hvac mode."""
+        hvac_mode = hvac_mode.lower()
         if hvac_mode not in self._hvac_list or hvac_mode == HVAC_MODE_OFF:
             self._hvac_mode = HVAC_MODE_OFF
             self._enabled = False
@@ -1225,20 +1308,18 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
             if self.fan_mode == HVAC_FAN_MAX:
                 fan_speed = HVAC_FAN_AUTO
 
-        # Set the swing mode - default off
-        if self._swingv is None or SWING_BOTH in self._swing_list or SWING_VERTICAL in self._swing_list:
-            swing_v = STATE_OFF
-            if self._swing_mode == SWING_BOTH or self._swing_mode == SWING_VERTICAL:
-                swing_v = STATE_AUTO
-        else:
-            swing_v = self._swingv
 
-        if self._swingh is None or SWING_BOTH in self._swing_list or SWING_HORIZONTAL in self._swing_list:
-            swing_h = STATE_OFF
+        # Set the swing mode - default off
+        self._swingv = STATE_OFF if self._fix_swingv is None else self._fix_swingv
+        self._swingh = STATE_OFF if self._fix_swingh is None else self._fix_swingh
+
+        if SWING_BOTH in self._swing_list or SWING_VERTICAL in self._swing_list:
+            if self._swing_mode == SWING_BOTH or self._swing_mode == SWING_VERTICAL:
+                self._swingv = STATE_AUTO
+
+        if SWING_BOTH in self._swing_list or SWING_HORIZONTAL in self._swing_list:
             if self._swing_mode == SWING_BOTH or self._swing_mode == SWING_HORIZONTAL:
-                swing_h = STATE_AUTO
-        else:
-            swing_h = self._swingh
+                self._swingh = STATE_AUTO
 
         _dt = dt_util.now()
         _min = _dt.hour * 60 + _dt.minute
@@ -1253,19 +1334,25 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
             "Celsius": self._celsius,
             "Temp": self._fahrenheit_to_celsius(self._target_temp),
             "FanSpeed": fan_speed,
-            "SwingV": swing_v,
-            "SwingH": swing_h,
+            "SwingV": self._swingv,
+            "SwingH": self._swingh,
             "Quiet": self._quiet,
             "Turbo": self._turbo,
             "Econo": self._econo,
             "Light": self._light,
-            "Filter": self._filters,
+            "Filter": self._filter,
             "Clean": self._clean,
             "Beep": self._beep,
             "Sleep": self._sleep,
             "Clock": int(_min),
             "Weekday": int(_dt.weekday()),
         }
+        for key in self._toggle_list:
+            setattr(self, '_' + key.lower(), 'off')
+
         payload = (json.dumps(payload_data))
         # Publish mqtt message
         await mqtt.async_publish(self.hass, self.topic, payload)
+
+        # Update HA UI and State
+        self.async_schedule_update_ha_state()
