@@ -778,6 +778,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                         "topic": self.state_topic,
                         "msg_callback": state_message_received,
                         "qos": 1,
+                        "retain": true,
                     }
                 }
 
