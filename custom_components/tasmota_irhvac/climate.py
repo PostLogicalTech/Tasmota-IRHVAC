@@ -445,8 +445,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
     ):
         """Initialize the thermostat."""
         self._unique_id = config.get(CONF_UNIQUE_ID)
-        """Griff Added to fix unavailable issue, potentially"""
-        # self._on = False
         self.topic = config.get(CONF_COMMAND_TOPIC)
         self.hass = hass
         self._vendor = vendor
@@ -535,9 +533,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         # Check If we have an old state
         old_state = await self.async_get_last_state()
         if old_state is not None:
-            _LOGGER.warning("There was an old state, so trying to restore.")
-            _LOGGER.warning(old_state)
-            _LOGGER.warning("ATTR_TEMPERATURE is ",old_state.attributes.get(ATTR_TEMPERATURE))
             # If we have no initial temperature, restore
             if old_state.attributes.get(ATTR_TEMPERATURE) is not None:
                 self._target_temp = float(
@@ -572,7 +567,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                 self._fix_swingh = self._swingh
         else:
             # No previous state, try and restore defaults
-            _LOGGER.warning("No old state, so using defaults.")
             if self._target_temp is None:
                 self._target_temp = self._def_target_temp
             _LOGGER.warning(
