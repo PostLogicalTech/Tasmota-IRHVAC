@@ -139,7 +139,6 @@ from .const import (
     CONF_KEEP_MODE,
     CONF_SWINGV,
     CONF_SWINGH,
-    CONF_PRESET_MODES_LIST,
     CONF_TOGGLE_LIST,
     DATA_KEY,
     DOMAIN,
@@ -162,11 +161,6 @@ from .const import (
     DEFAULT_CONF_BEEP,
     DEFAULT_CONF_SLEEP,
     DEFAULT_CONF_KEEP_MODE,
-    PRESET_POWERFUL,
-    PRESET_MIN_HEAT,
-    PRESET_ECONO,
-    PRESET_SET_V,
-    PRESET_SET_H,
     ON_OFF_LIST,
     SERVICE_ECONO_MODE,
     SERVICE_TURBO_MODE,
@@ -189,10 +183,6 @@ DEFAULT_MODES_LIST = [
     HVAC_MODE_FAN_AUTO,
 ]
 
-DEFAULT_PRESET_MODES_LIST = [PRESET_NONE, PRESET_AWAY]
-AVAILABLE_PRESET_MODES_LIST = [PRESET_NONE, PRESET_AWAY, PRESET_POWERFUL, PRESET_MIN_HEAT,
-                                PRESET_ECONO, PRESET_SET_V, PRESET_SET_H]
-
 DEFAULT_SWING_LIST = [SWING_OFF, SWING_VERTICAL]
 DEFAULT_INITIAL_OPERATION_MODE = HVAC_MODE_OFF
 
@@ -201,7 +191,6 @@ _LOGGER = logging.getLogger(__name__)
 SUPPORT_FLAGS = (
     SUPPORT_TARGET_TEMPERATURE
     | SUPPORT_FAN_MODE
-    | SUPPORT_PRESET_MODE
 )
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -233,7 +222,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
             [PRECISION_TENTHS, PRECISION_HALVES, PRECISION_WHOLE]
         ),
         vol.Optional(CONF_TEMP_STEP, default=PRECISION_WHOLE): vol.In(
-            [PRECISION_HALVES, PRECISION_WHOLE, 2]
+            [PRECISION_HALVES, PRECISION_WHOLE]
         ),
         vol.Optional(CONF_MODES_LIST, default=DEFAULT_MODES_LIST): vol.All(
             cv.ensure_list, [vol.In(HVAC_MODES)]
@@ -279,9 +268,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_KEEP_MODE, default=DEFAULT_CONF_KEEP_MODE): cv.boolean,
         vol.Optional(CONF_SWINGV): cv.string,
         vol.Optional(CONF_SWINGH): cv.string,
-        vol.Optional(CONF_PRESET_MODES_LIST, default=DEFAULT_PRESET_MODES_LIST): vol.All(
-            cv.ensure_list, [vol.In(AVAILABLE_PRESET_MODES_LIST)],
-        ),
         vol.Optional(CONF_TOGGLE_LIST, default=[]): vol.All(
             cv.ensure_list,
             [vol.In(TOGGLE_ALL_LIST)],
@@ -457,6 +443,7 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         self._away_temp = config.get(CONF_AWAY_TEMP)
         self._saved_target_temp = config[CONF_TARGET_TEMP] or self._away_temp
         self._temp_precision = config[CONF_PRECISION]
+        self._temp_step = config[CONF_TEMP_STEP]
         self._hvac_list = config[CONF_MODES_LIST]
         self._fan_list = config[CONF_FAN_LIST]
         self._fan_mode = self._fan_list[0]
@@ -467,6 +454,8 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         self._active = False
         self._cur_temp = None
         self._cur_humidity = None
+        self._target_temp = None
+        self._def_target_temp = config[CONF_TARGET_TEMP]
         self._unit = hass.config.units.temperature_unit
         if self._unit == TEMP_FAHRENHEIT:
             self._min_temp = self._celsius_to_fahrenheit(config[CONF_MIN_TEMP])
@@ -477,18 +466,11 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
             self._min_temp = config[CONF_MIN_TEMP]
             self._max_temp = config[CONF_MAX_TEMP]
             self._def_target_temp = config[CONF_TARGET_TEMP]
-        self._temp_step = config[CONF_TEMP_STEP]
-        self._target_temp = None
         self._support_flags = SUPPORT_FLAGS
-        # if self._away_temp is not None:
-        #     self._support_flags = self._support_flags | SUPPORT_PRESET_MODE
+        if self._away_temp is not None:
+            self._support_flags = self._support_flags | SUPPORT_PRESET_MODE
         if self._swing_mode is not None:
             self._support_flags = self._support_flags | SUPPORT_SWING_MODE
-        self._preset_mode = None
-        self._preset_modes_list = config[CONF_PRESET_MODES_LIST]
-        self._min_heat = False
-        self._economy = False
-        self._powerful = False
         self._is_away = False
         self._modes_list = config[CONF_MODES_LIST]
         self._quiet = config[CONF_QUIET].lower()
@@ -539,12 +521,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                     old_state.attributes[ATTR_TEMPERATURE])
             if old_state.attributes.get(ATTR_PRESET_MODE) == PRESET_AWAY:
                 self._is_away = True
-            elif old_state.attributes.get(ATTR_PRESET_MODE) == PRESET_MIN_HEAT:
-                self._min_heat = True
-            elif old_state.attributes.get(ATTR_PRESET_MODE) == PRESET_ECONO:
-                self._economy = True
-            elif old_state.attributes.get(ATTR_PRESET_MODE) == PRESET_POWERFUL:
-                self._powerful = True
             if old_state.attributes.get(ATTR_FAN_MODE) is not None:
                 self._fan_mode = old_state.attributes.get(ATTR_FAN_MODE)
             if old_state.attributes.get(ATTR_SWING_MODE) is not None:
@@ -619,133 +595,92 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
             if "IRHVAC" not in json_payload:
                 return
 
-            if "Data" in json_payload:
-                data = json_payload["Data"]
-                if json_payload["Bits"] == 56:
-                    if data == "0x146300101039C6": #Powerful
-                        self._powerful = True
-                        self._preset_mode = PRESET_POWERFUL
-                    elif data == "0x146300101009F6": #Economy
-                        self._economy = True
-                        self._preset_mode = PRESET_ECONO
-                    elif data == "0x14630010106C93": #Set Vertical
-                        self._preset_mode = PRESET_SET_V
-                        self._swingv = None
-                        if self._swing_mode == SWING_BOTH:
-                            self._swing_mode = SWING_HORIZONTAL
-                        elif self._swing_mode == SWING_VERTICAL:
-                            self._swing_mode = SWING_OFF
-                    elif data == "0x14630010107986": #Set Horizontal
-                        self._preset_mode = PRESET_SET_H
-                        self._swingh = None
-                        if self._swing_mode == SWING_BOTH:
-                            self._swing_mode = SWING_VERTICAL
-                        elif self._swing_mode == SWING_HORIZONTAL:
-                            self._swing_mode = SWING_OFF
-                elif data == "0x1463001010FE0930800B000000002025": #Min Heat
-                    self._min_heat = True
-                    self._preset_mode = PRESET_MIN_HEAT
-                    self.power_mode = "on"
-                    self._hvac_mode = "heat"
-                    self._target_temp = 50
-                    self._econo = "off"
-                    self._turbo = "off"
-                    self._clean = "off"
+            payload = json_payload["IRHVAC"]
+
+            if payload["Vendor"] == self._vendor:
+                # All values in the payload are Optional
+                prev_power = self.power_mode
+                if "Power" in payload:
+                    self.power_mode = payload["Power"].lower()
+                if "Mode" in payload:
+                    self._hvac_mode = payload["Mode"].lower()
+                    # Some vendors send/receive mode as fan instead of fan_only
+                    if self._hvac_mode == CURRENT_HVAC_FAN:
+                        self._hvac_mode = HVAC_MODE_FAN_ONLY
+                if "Temp" in payload:
+                    if payload["Temp"] > 0:
+                        self._target_temp = self._celsius_to_fahrenheit(payload["Temp"])
+                if "Celsius" in payload:
+                    self._celsius = payload["Celsius"].lower()
+                if "Quiet" in payload:
+                    self._quiet = payload["Quiet"].lower()
+                if "Turbo" in payload:
+                    self._turbo = payload["Turbo"].lower()
+                if "Econo" in payload:
+                    self._econo = payload["Econo"].lower()
+                if "Light" in payload:
+                    self._light = payload["Light"].lower()
+                if "Filter" in payload:
+                    self._filter = payload["Filter"].lower()
+                if "Clean" in payload:
+                    self._clean = payload["Clean"].lower()
+                if "Beep" in payload:
+                    self._beep = payload["Beep"].lower()
+                if "Sleep" in payload:
+                    self._sleep = payload["Sleep"]
+                if  "SwingV" in payload:
+                    self._swingv = payload["SwingV"].lower()
+                    if self._swingv != "auto":
+                        self._fix_swingv = self._swingv
+                if  "SwingH" in payload:
+                    self._swingh = payload["SwingH"].lower()
+                    if self._swingh != "auto":
+                        self._fix_swingh = self._swingh
+                if (
+                    "SwingV" in payload
+                    and payload["SwingV"].lower() == STATE_AUTO
+                    and "SwingH" in payload
+                    and payload["SwingH"].lower() == STATE_AUTO
+                ):
+                    if SWING_BOTH in self._swing_list:
+                        self._swing_mode = SWING_BOTH
+                    elif SWING_VERTICAL in self._swing_list:
+                        self._swing_mode = SWING_VERTICAL
+                    elif SWING_HORIZONTAL in self._swing_list:
+                        self._swing_mode = SWING_HORIZONTAL
+                    else:
+                        self._swing_mode = SWING_OFF
+                elif (
+                    "SwingV" in payload
+                    and payload["SwingV"].lower() == STATE_AUTO
+                    and SWING_VERTICAL in self._swing_list
+                ):
+                    self._swing_mode = SWING_VERTICAL
+                elif (
+                    "SwingH" in payload
+                    and payload["SwingH"].lower() == STATE_AUTO
+                    and SWING_HORIZONTAL in self._swing_list
+                ):
+                    self._swing_mode = SWING_HORIZONTAL
                 else:
-                    payload = json_payload["IRHVAC"]
+                    self._swing_mode = SWING_OFF
 
-                    if payload["Vendor"] == self._vendor:
-                        # All values in the payload are Optional
-                        prev_power = self.power_mode
-                        if "Power" in payload:
-                            self.power_mode = payload["Power"].lower()
-                            if self.power_mode == "off":
-                                self._min_heat = False
-                        if "Mode" in payload:
-                            self._hvac_mode = payload["Mode"].lower()
-                        if "Temp" in payload:
-                            if payload["Temp"] > 0:
-                                self._target_temp = self._celsius_to_fahrenheit(payload["Temp"])
-                        if "Celsius" in payload:
-                            self._celsius = payload["Celsius"].lower()
-                        if "Quiet" in payload:
-                            self._quiet = payload["Quiet"].lower()
-                        if "Turbo" in payload:
-                            self._turbo = payload["Turbo"].lower()
-                            if payload["Turbo"].lower() == "on":
-                                self._preset_mode = PRESET_POWERFUL
-                                self._powerful = True
-                        if "Econo" in payload:
-                            self._econo = payload["Econo"].lower()
-                            if payload["Econo"].lower() == "on":
-                                self._preset_mode = PRESET_ECONO
-                                self._economy = True
-                        if "Light" in payload:
-                            self._light = payload["Light"].lower()
-                        if "Filter" in payload:
-                            self._filter = payload["Filter"].lower()
-                        if "Clean" in payload:
-                            self._clean = payload["Clean"].lower()
-                            if payload["Clean"].lower() == "on":
-                                self._preset_mode = PRESET_MIN_HEAT #MIN_HEAT has the same code as CLEAN on another model, so no differentiating in IRRemoteESP8266 codebase
-                                self._min_heat = True
-                        if "Beep" in payload:
-                            self._beep = payload["Beep"].lower()
-                        if "Sleep" in payload:
-                            self._sleep = payload["Sleep"]
-                        if  "SwingV" in payload:
-                            self._swingv = payload["SwingV"].lower()
-                            if self._swingv != "auto":
-                                self._fix_swingv = self._swingv
-                        if  "SwingH" in payload:
-                            self._swingh = payload["SwingH"].lower()
-                            if self._swingh != "auto":
-                                self._fix_swingh = self._swingh
-                        if (
-                            "SwingV" in payload
-                            and payload["SwingV"].lower() == STATE_AUTO
-                            and "SwingH" in payload
-                            and payload["SwingH"].lower() == STATE_AUTO
-                        ):
-                            if SWING_BOTH in self._swing_list:
-                                self._swing_mode = SWING_BOTH
-                            elif SWING_VERTICAL in self._swing_list:
-                                self._swing_mode = SWING_VERTICAL
-                            elif SWING_HORIZONTAL in self._swing_list:
-                                self._swing_mode = SWING_HORIZONTAL
-                            else:
-                                self._swing_mode = SWING_OFF
-                        elif (
-                            "SwingV" in payload
-                            and payload["SwingV"].lower() == STATE_AUTO
-                            and SWING_VERTICAL in self._swing_list
-                        ):
-                            self._swing_mode = SWING_VERTICAL
-                        elif (
-                            "SwingH" in payload
-                            and payload["SwingH"].lower() == STATE_AUTO
-                            and SWING_HORIZONTAL in self._swing_list
-                        ):
-                            self._swing_mode = SWING_HORIZONTAL
+                if "FanSpeed" in payload:
+                    fan_mode = payload["FanSpeed"].lower()
+                    # ELECTRA_AC fan modes fix
+                    if (
+                        HVAC_FAN_MAX_HIGH in self._fan_list
+                        and HVAC_FAN_AUTO_MAX in self._fan_list
+                    ):
+                        if fan_mode == HVAC_FAN_MAX:
+                            self._fan_mode = FAN_HIGH
+                        elif fan_mode == HVAC_FAN_AUTO:
+                            self._fan_mode = HVAC_FAN_MAX
                         else:
-                            self._swing_mode = SWING_OFF
-
-                        if "FanSpeed" in payload:
-                            fan_mode = payload["FanSpeed"].lower()
-                            # ELECTRA_AC fan modes fix
-                            if (
-                                HVAC_FAN_MAX_HIGH in self._fan_list
-                                and HVAC_FAN_AUTO_MAX in self._fan_list
-                            ):
-                                if fan_mode == HVAC_FAN_MAX:
-                                    self._fan_mode = FAN_HIGH
-                                elif fan_mode == HVAC_FAN_AUTO:
-                                    self._fan_mode = HVAC_FAN_MAX
-                                else:
-                                    self._fan_mode = fan_mode
-                            else:
-                                self._fan_mode = fan_mode
-                            _LOGGER.debug(self._fan_mode)
+                            self._fan_mode = fan_mode
+                    else:
+                        self._fan_mode = fan_mode
+                    _LOGGER.debug(self._fan_mode)
 
                 if self._hvac_mode is not HVAC_MODE_OFF:
                     self._last_on_mode = self._hvac_mode
@@ -765,11 +700,11 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
                 await self.async_update_ha_state()
                 #self.async_schedule_update_ha_state()
 
-            # Check power sensor state
-            if self._power_sensor and prev_power is not None and prev_power != self.power_mode:
-                await asyncio.sleep(3)
-                state = self.hass.states.get(self._power_sensor)
-                await self._async_power_sensor_changed(self._power_sensor, None, state)
+                # Check power sensor state
+                if self._power_sensor and prev_power is not None and prev_power != self.power_mode:
+                    await asyncio.sleep(3)
+                    state = self.hass.states.get(self._power_sensor)
+                    await self._async_power_sensor_changed(self._power_sensor, None, state)
 
         topics = {
                     CONF_STATE_TOPIC: {
@@ -887,22 +822,12 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
     @property
     def preset_mode(self):
         """Return the current preset mode, e.g., home, away, temp."""
-        # return PRESET_AWAY if self._is_away else PRESET_NONE
-        if self._min_heat:
-            return PRESET_MIN_HEAT
-        elif self._economy:
-            return PRESET_ECONO
-        elif self._powerful:
-            return PRESET_POWERFUL
-        elif self._is_away:
-            return PRESET_AWAY
-        return PRESET_NONE
+        return PRESET_AWAY if self._is_away else PRESET_NONE
 
     @property
     def preset_modes(self):
         """Return a list of available preset modes or PRESET_NONE if _away_temp is undefined."""
-        # return [PRESET_NONE, PRESET_AWAY] if self._away_temp else PRESET_NONE
-        return self._preset_modes_list # Fix these if they do appear
+        return [PRESET_NONE, PRESET_AWAY] if self._away_temp else PRESET_NONE
 
     @property
     def fan_mode(self):
@@ -911,6 +836,14 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         Requires SUPPORT_FAN_MODE.
         """
         return self._fan_mode
+
+    """Code adapted from https://github.com/smartHomeHub/SmartIR/pull/795/commits/084f7061befd1a491b22fdd4fab725e25062d66b"""
+    def _celsius_to_fahrenheit(self, temperature):
+        if temperature is not None:
+            return (temperature * (9/5) + 32)
+    def _fahrenheit_to_celsius(self, temperature):
+        if temperature is not None:
+            return ((temperature - 32) * (5/9))
 
     @property
     def fan_modes(self):
@@ -969,14 +902,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         self._hvac_mode = HVAC_MODE_OFF
         self.power_mode = STATE_OFF
         await self.async_send_cmd()
-
-    """Code adapted from https://github.com/smartHomeHub/SmartIR/pull/795/commits/084f7061befd1a491b22fdd4fab725e25062d66b"""
-    def _celsius_to_fahrenheit(self, temperature):
-        if temperature is not None:
-            return (temperature * 2 + 28)
-    def _fahrenheit_to_celsius(self, temperature):
-        if temperature is not None:
-            return ((temperature - 28) / 2)
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
@@ -1214,17 +1139,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
 
         This method must be run in the event loop and returns a coroutine.
         """
-        if preset_mode != PRESET_MIN_HEAT and self._min_heat:
-            stop_cmd = "raw,0,3324,1574,448,390,1182,00101000110001100000000000001000000010000100000010111111"
-            path = self.topic.split('/')
-            irsend = "cmnd/" + path[1] + "/irsend"
-            await mqtt.async_publish(self.hass, irsend, stop_cmd)
-            self._target_temp = self._saved_target_temp
-        if preset_mode != PRESET_ECONO and preset_mode != PRESET_SET_V and preset_mode != PRESET_SET_H and self._economy:
-            econo_toggle = "raw,0,3324,1574,448,390,1182,00101000110001100000000000001000000010001001000001101111"
-            path = self.topic.split('/')
-            irsend = "cmnd/" + path[1] + "/irsend"
-            await mqtt.async_publish(self.hass, irsend, econo_toggle)
         if preset_mode == PRESET_AWAY and not self._is_away:
             self._is_away = True
             self._saved_target_temp = self._target_temp
@@ -1232,55 +1146,6 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
         elif preset_mode == PRESET_NONE and self._is_away:
             self._is_away = False
             self._target_temp = self._saved_target_temp
-        if preset_mode == PRESET_NONE:
-            self._turbo = "off"
-            self._econo = "off"
-            self._clean = "off"
-            self._economy = False
-            self._min_heat = False
-            self._powerful = False
-        elif preset_mode != PRESET_AWAY:
-            if preset_mode == PRESET_POWERFUL:
-                if not self._powerful:
-                    payload_data = "raw,0,3324,1574,448,390,1182,00101000110001100000000000001000000010001001110001100011"
-                    self._powerful = True
-            elif preset_mode == PRESET_ECONO:
-                if not self._economy:
-                    payload_data = "raw,0,3324,1574,448,390,1182,00101000110001100000000000001000000010001001000001101111"
-                    self._economy = True
-            elif preset_mode == PRESET_MIN_HEAT:
-                if not self._min_heat:
-                    self._saved_target_temp = self._target_temp
-                    payload_data = "raw,0,3324,1574,448,390,1182,00101000110001100000000000001000000010000111111110010000000011001000110011010000010000000000000000000000000000000000010001001110"
-                    self.power_mode = "on"
-                    self._min_heat = True
-                    self._hvac_mode = "heat"
-                    self._target_temp = 50
-                    self._econo = "off"
-                    self._economy = False
-                    self._powerful = False
-                    self._turbo = "off"
-                    self._clean = "off"
-            elif preset_mode == PRESET_SET_V:
-                payload_data = "raw,0,3324,1574,448,390,1182,00101000110001100000000000001000000010000011011011001001"
-                self._swingv = None
-                if self._swing_mode == SWING_BOTH:
-                    self._swing_mode = SWING_HORIZONTAL
-                elif self._swing_mode == SWING_VERTICAL:
-                    self._swing_mode = SWING_OFF
-            elif preset_mode == PRESET_SET_H:
-                payload_data = "raw,0,3324,1574,448,390,1182,00101000110001100000000000001000000010001001111001100001"
-                self._swingh = None
-                if self._swing_mode == SWING_BOTH:
-                    self._swing_mode = SWING_VERTICAL
-                elif self._swing_mode == SWING_HORIZONTAL:
-                    self._swing_mode = SWING_OFF
-            path = self.topic.split('/')
-            irsend = "cmnd/" + path[1] + "/irsend"
-            await mqtt.async_publish(self.hass, irsend, payload_data)
-            return await self.async_update_ha_state()
-            """Test this above section and finish the rest if it works"""
-
         await self.send_ir()
         await self.async_update_ha_state()
 
