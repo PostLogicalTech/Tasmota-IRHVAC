@@ -840,10 +840,24 @@ class TasmotaIrhvac(ClimateEntity, RestoreEntity, MqttAvailability):
     """Code adapted from https://github.com/smartHomeHub/SmartIR/pull/795/commits/084f7061befd1a491b22fdd4fab725e25062d66b"""
     def _celsius_to_fahrenheit(self, temperature):
         if temperature is not None:
-            return (temperature * (9/5) + 32)
+            if temperature < 20:
+                return (temperature * 2 + 29)
+            elif temperature == 20:
+                return (temperature * 2 + 28)
+            elif temperature == 31:
+                return (temperature * 2 + 26)
+            else:
+                return (temperature * 2 + 27)
     def _fahrenheit_to_celsius(self, temperature):
         if temperature is not None:
-            return ((temperature - 32) * (5/9))
+            if temperature < 68:
+                return ((temperature - 29) / 2)
+            elif temperature == 68:
+                return ((temperature - 28) / 2)
+            elif temperature == 88:
+                return ((temperature - 26) / 2)
+            else:
+                return ((temperature - 27) / 2)
 
     @property
     def fan_modes(self):
