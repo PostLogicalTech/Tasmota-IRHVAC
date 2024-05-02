@@ -5,13 +5,6 @@
   "documentation": "https://github.com/PostLogical/Tasmota-IRHVAC",
   "issue_tracker": "https://github.com/PostLogical/Tasmota-IRHVAC/issues",
   "requirements": [],
-  "dependencies": [
-    "mqtt",
-    "sensor"
-  ],
-  "codeowners": [
-    "@hristo-atanasov",
-    "@nao-pon",
-    "@PostLogical"
-  ]
+  "dependencies": ["mqtt", "sensor"],
+  "codeowners": ["@hristo-atanasov", "@nao-pon", "@PostLogical"]
 }
