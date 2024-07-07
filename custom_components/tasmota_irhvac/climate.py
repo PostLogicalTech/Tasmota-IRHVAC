@@ -1045,6 +1045,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         """
         return self._attr_swing_modes
     
+    @property
     def extra_state_attributes(self):
         """Return the state attributes of the device."""
         return {
