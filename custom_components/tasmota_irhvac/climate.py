@@ -115,6 +115,7 @@ from .const import (
     CONF_ECONO,
     CONF_MODEL,
     CONF_CELSIUS,
+    CONF_CELSIUS_MODE,
     CONF_LIGHT,
     CONF_FILTER,
     CONF_CLEAN,
@@ -541,6 +542,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         self._econo = config[CONF_ECONO].lower()
         self._model = config[CONF_MODEL]
         self._celsius = config[CONF_CELSIUS]
+        self._celsius_mode = config[CONF_CELSIUS_MODE]
         self._light = config[CONF_LIGHT].lower()
         self._filter = config[CONF_FILTER].lower()
         self._clean = config[CONF_CLEAN].lower()
@@ -577,10 +579,9 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         self._attr_name = config.get(CONF_NAME)
         self._attr_should_poll = False
         self._attr_temperature_unit = (
-            UnitOfTemperature.FAHRENHEIT
-            # UnitOfTemperature.CELSIUS
-            # if self._celsius.lower() == "on"
-            # else UnitOfTemperature.FAHRENHEIT
+            UnitOfTemperature.CELSIUS
+            if self._celsius.lower() == "on"
+            else UnitOfTemperature.FAHRENHEIT
         )
         self._attr_hvac_mode = config.get(CONF_INITIAL_OPERATION_MODE)
         self._attr_target_temperature_step = config[CONF_TEMP_STEP]
@@ -815,7 +816,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
                                 else:
                                     self._attr_target_temperature = self._celsius_to_fahrenheit(payload["Temp"])
                         if "Celsius" in payload:
-                            self._celsius = payload["Celsius"].lower()
+                            self._celsius_mode = payload["Celsius"].lower()
                         if "Quiet" in payload:
                             self._quiet = payload["Quiet"].lower()
                         if "Turbo" in payload:
@@ -1466,7 +1467,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
             "Model": self._model,
             "Power": self.power_mode,
             "Mode": self._last_on_mode if self._keep_mode else self._attr_hvac_mode,
-            "Celsius": self._celsius,
+            "Celsius": self._celsius_mode,
             "Temp": self._fahrenheit_to_celsius(self._attr_target_temperature),
             "FanSpeed": fan_speed,
             "SwingV": self._swingv,
