@@ -501,11 +501,11 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         self._away_temp = config.get(CONF_AWAY_TEMP)
         self._saved_target_temp = config[CONF_TARGET_TEMP] or self._away_temp
         self._temp_precision = config[CONF_PRECISION]
-        self._attr_hvac_modes = config[CONF_MODES_LIST]
-        self._attr_fan_modes = config[CONF_FAN_LIST]
-        self._attr_fan_mode = self._attr_fan_modes[0]
-        self._attr_swing_modes = config[CONF_SWING_LIST]
-        self._attr_swing_mode = self._attr_swing_modes[0] if len(self._attr_swing_modes) > 0 else None
+        # self._attr_hvac_modes = config[CONF_MODES_LIST]
+        # self._attr_fan_modes = config[CONF_FAN_LIST]
+        # self._attr_fan_mode = self._attr_fan_modes[0]
+        # self._attr_swing_modes = config[CONF_SWING_LIST]
+        # self._attr_swing_mode = self._attr_swing_modes[0] if len(self._attr_swing_modes) > 0 else None
         self._enabled = False
         self.power_mode = None
         self._active = False
@@ -517,20 +517,20 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
             self._min_temp = self._celsius_to_fahrenheit(config[CONF_MIN_TEMP])
             self._max_temp = self._celsius_to_fahrenheit(config[CONF_MAX_TEMP])
             self._def_target_temp = self._celsius_to_fahrenheit(config[CONF_TARGET_TEMP])
-            # self._temp_step = 2
+            # self._attr_target_temperature_step = 2
         else:
             self._min_temp = config[CONF_MIN_TEMP]
             self._max_temp = config[CONF_MAX_TEMP]
             self._def_target_temp = config[CONF_TARGET_TEMP]
-        self._temp_step = config[CONF_TEMP_STEP]
-        self._attr_target_temperature = None
-        self._support_flags = SUPPORT_FLAGS
+        # self._attr_target_temperature_step = config[CONF_TEMP_STEP]
+        # self._attr_target_temperature = None
+        # self._support_flags = SUPPORT_FLAGS
         # if self._away_temp is not None:
         #     self._support_flags = self._support_flags | ClimateEntityFeature.PRESET_MODE
-        if self._attr_swing_mode is not None:
-            self._support_flags = self._support_flags | ClimateEntityFeature.SWING_MODE
-        self._attr_preset_mode = None
-        self._attr_preset_modes = config[CONF_PRESET_MODES_LIST]
+        # if self._attr_swing_mode is not None:
+        #     self._support_flags = self._support_flags | ClimateEntityFeature.SWING_MODE
+        # self._attr_preset_mode = None
+        # self._attr_preset_modes = config[CONF_PRESET_MODES_LIST]
         self._min_heat = False
         self._economy = False
         self._powerful = False
@@ -610,17 +610,18 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
             if isinstance(self._attr_swing_modes, list) and len(self._attr_swing_modes)
             else None
         )
-        self._attr_preset_modes = (
-            [PRESET_NONE, PRESET_AWAY] if self._away_temp else None
-        )
+        # self._attr_preset_modes = (
+        #     [PRESET_NONE, PRESET_AWAY] if self._away_temp else None
+        # )
+        self._attr_preset_modes = config[CONF_PRESET_MODES_LIST]
         self._attr_preset_mode = None
         self._attr_current_temperature = None
         self._attr_current_humidity = None
         self._attr_target_temperature = None
 
         self._support_flags = SUPPORT_FLAGS
-        if self._away_temp is not None:
-            self._support_flags = self._support_flags | ClimateEntityFeature.PRESET_MODE
+        # if self._away_temp is not None:
+        #     self._support_flags = self._support_flags | ClimateEntityFeature.PRESET_MODE
         if self._attr_swing_mode is not None:
             self._support_flags = self._support_flags | ClimateEntityFeature.SWING_MODE
 
