@@ -577,9 +577,10 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         self._attr_name = config.get(CONF_NAME)
         self._attr_should_poll = False
         self._attr_temperature_unit = (
-            UnitOfTemperature.CELSIUS
-            if self._celsius.lower() == "on"
-            else UnitOfTemperature.FAHRENHEIT
+            UnitOfTemperature.FAHRENHEIT
+            # UnitOfTemperature.CELSIUS
+            # if self._celsius.lower() == "on"
+            # else UnitOfTemperature.FAHRENHEIT
         )
         self._attr_hvac_mode = config.get(CONF_INITIAL_OPERATION_MODE)
         self._attr_target_temperature_step = config[CONF_TEMP_STEP]
