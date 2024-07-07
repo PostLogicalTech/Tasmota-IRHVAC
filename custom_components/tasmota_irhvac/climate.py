@@ -1402,7 +1402,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
             path = self.topic.split('/')
             irsend = "cmnd/" + path[1] + "/irsend"
             await mqtt.async_publish(self.hass, irsend, payload_data)
-            return await self.async_update_ha_state()
+            return await self.async_schedule_update_ha_state()
             """Test this above section and finish the rest if it works"""
 
         await self.send_ir()
