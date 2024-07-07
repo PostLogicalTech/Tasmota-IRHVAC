@@ -1000,7 +1000,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
     def preset_modes(self):
         """Return a list of available preset modes or PRESET_NONE if _away_temp is undefined."""
         # return [PRESET_NONE, PRESET_AWAY] if self._away_temp else PRESET_NONE
-        return self._preset_modes_list # Fix these if they do appear
+        return self._attr_preset_modes # Fix these if they do appear
 
     @property
     def fan_mode(self):
