@@ -1044,7 +1044,8 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         Requires SUPPORT_SWING_MODE.
         """
         return self._attr_swing_modes
-    
+
+    # This extension property is written throughout the instance, so use @property instead of @cached_property.
     @property
     def extra_state_attributes(self):
         """Return the state attributes of the device."""
