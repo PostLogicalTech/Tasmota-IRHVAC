@@ -1,9 +1,9 @@
 {
   "domain": "tasmota_irhvac",
   "name": "Tasmota Irhvac",
-  "version": "2024.6.3",
-  "documentation": "https://github.com/hristo-atanasov/Tasmota-IRHVAC",
-  "issue_tracker": "https://github.com/hristo-atanasov/Tasmota-IRHVAC/issues",
+  "version": "2024.7.1",
+  "documentation": "https://github.com/PostLogicalTech/Tasmota-IRHVAC",
+  "issue_tracker": "https://github.com/PostLogicalTech/Tasmota-IRHVAC/issues",
   "homeassistant": "2022.5.0",
   "requirements": [],
   "dependencies": [
@@ -12,6 +12,7 @@
   ],
   "codeowners": [
     "@hristo-atanasov",
-    "@nao-pon"
+    "@nao-pon",
+    "@PostLogical"
   ]
 }

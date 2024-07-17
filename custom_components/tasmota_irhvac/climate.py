@@ -492,9 +492,6 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         self.power_mode = None
         self._active = False
         self._mqtt_delay = config[CONF_MQTT_DELAY]
-        self._min_temp = config[CONF_MIN_TEMP]
-        self._max_temp = config[CONF_MAX_TEMP]
-        self._def_target_temp = config[CONF_TARGET_TEMP]
         self._is_away = False
         self._modes_list = config[CONF_MODES_LIST]
         self._quiet = config[CONF_QUIET].lower()
@@ -578,6 +575,14 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         self._attr_current_temperature = None
         self._attr_current_humidity = None
         self._attr_target_temperature = None
+        if self._attr_temperature_unit == UnitOfTemperature.FAHRENHEIT:
+            self._min_temp = self._celsius_to_fahrenheit(config[CONF_MIN_TEMP])
+            self._max_temp = self._celsius_to_fahrenheit(config[CONF_MAX_TEMP])
+            self._def_target_temp = self._celsius_to_fahrenheit(config[CONF_TARGET_TEMP])
+        else:
+            self._min_temp = config[CONF_MIN_TEMP]
+            self._max_temp = config[CONF_MAX_TEMP]
+            self._def_target_temp = config[CONF_TARGET_TEMP]
 
         self._support_flags = SUPPORT_FLAGS
         if self._away_temp is not None:
@@ -733,7 +738,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
                                 self._attr_target_temperature
                             )
                         else:
-                            self._attr_target_temperature = payload["Temp"]
+                            self._attr_target_temperature = self._celsius_to_fahrenheit(payload["Temp"])
                 if "Celsius" in payload:
                     self._celsius = payload["Celsius"].lower()
                 if "Quiet" in payload:
@@ -955,6 +960,28 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         if not self._attr_hvac_mode == HVACMode.OFF:
             self.power_mode = STATE_ON
         await self.async_send_cmd()
+
+    """Code adapted from https://github.com/smartHomeHub/SmartIR/pull/795/commits/084f7061befd1a491b22fdd4fab725e25062d66b"""
+    def _celsius_to_fahrenheit(self, temperature):
+        if temperature is not None:
+            if temperature < 20:
+                return (temperature * 2 + 29)
+            elif temperature == 20:
+                return (temperature * 2 + 28)
+            elif temperature == 31:
+                return (temperature * 2 + 26)
+            else:
+                return (temperature * 2 + 27)
+    def _fahrenheit_to_celsius(self, temperature):
+        if temperature is not None:
+            if temperature < 68:
+                return ((temperature - 29) / 2)
+            elif temperature == 68:
+                return ((temperature - 28) / 2)
+            elif temperature == 88:
+                return ((temperature - 26) / 2)
+            else:
+                return ((temperature - 27) / 2)
 
     async def async_set_swing_mode(self, swing_mode):
         """Set new target swing operation."""
@@ -1236,7 +1263,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
             "Power": self.power_mode,
             "Mode": self._last_on_mode if self._keep_mode else self._attr_hvac_mode,
             "Celsius": self._celsius,
-            "Temp": self._attr_target_temperature,
+            "Temp": self._fahrenheit_to_celsius(self._attr_target_temperature),
             "FanSpeed": fan_speed,
             "SwingV": self._swingv,
             "SwingH": self._swingh,
