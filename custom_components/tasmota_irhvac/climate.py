@@ -115,6 +115,7 @@ from .const import (
     CONF_ECONO,
     CONF_MODEL,
     CONF_CELSIUS,
+    CONF_CELSIUS_MODE,
     CONF_LIGHT,
     CONF_FILTER,
     CONF_CLEAN,
@@ -141,6 +142,7 @@ from .const import (
     DEFAULT_CONF_ECONO,
     DEFAULT_CONF_MODEL,
     DEFAULT_CONF_CELSIUS,
+    DEFAULT_CONF_CELSIUS_MODE,
     DEFAULT_CONF_LIGHT,
     DEFAULT_CONF_FILTER,
     DEFAULT_CONF_CLEAN,
@@ -249,6 +251,7 @@ PLATFORM_SCHEMA = CLIMATE_PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_ECONO, default=DEFAULT_CONF_ECONO): cv.string,
         vol.Optional(CONF_MODEL, default=DEFAULT_CONF_MODEL): cv.string,
         vol.Optional(CONF_CELSIUS, default=DEFAULT_CONF_CELSIUS): cv.string,
+        vol.Optional(CONF_CELSIUS_MODE, default=DEFAULT_CONF_CELSIUS_MODE): cv.string,
         vol.Optional(CONF_LIGHT, default=DEFAULT_CONF_LIGHT): cv.string,
         vol.Optional(CONF_FILTER, default=DEFAULT_CONF_FILTER): cv.string,
         vol.Optional(CONF_CLEAN, default=DEFAULT_CONF_CLEAN): cv.string,
@@ -499,6 +502,7 @@ class TasmotaIrhvac(RestoreEntity, ClimateEntity):
         self._econo = config[CONF_ECONO].lower()
         self._model = config[CONF_MODEL]
         self._celsius = config[CONF_CELSIUS]
+        self._celsius_mode = config[CONF_CELSIUS_MODE]
         self._light = config[CONF_LIGHT].lower()
         self._filter = config[CONF_FILTER].lower()
         self._clean = config[CONF_CLEAN].lower()
